@@ -367,7 +367,7 @@ body.search-has-text #raffles{ display:none !important; } /* << solo mostrar sel
   from{ filter:saturate(1.02) brightness(1.00); }
   to{ filter:saturate(1.20) brightness(1.05); }
 }
-.raffle.selected .num{ animation:selectedPulse 1.2s ease-in-out infinite alternate; }
+.raffle.selected .numMain{ animation:selectedPulse 1.2s ease-in-out infinite alternate; }
 
 .large-raffle{--size:clamp(160px,52vw,200px);width:var(--size);height:calc(var(--size) + 18px)}
 .large-raffle .num{font-size:clamp(50px,12vw,70px)}
@@ -410,7 +410,7 @@ body.search-has-text #raffles{ display:none !important; } /* << solo mostrar sel
 .btn.no{font-weight:900;border:none;border-radius:14px;padding:12px 18px;cursor:pointer;background:linear-gradient(90deg,#ff6b6b,#ffd0d0);color:#1a0606}
 
 /* Revelado del número */
-.raffle.revealed .num{animation:revealPop .6s cubic-bezier(.2,.9,.2,1)}
+.raffle.revealed .numMain{animation:revealPop .6s cubic-bezier(.2,.9,.2,1)}
 @keyframes revealPop{0%{transform:scale(.9);filter:brightness(1.25);text-shadow:0 0 18px rgba(245,249,255,.55),0 0 30px rgba(11,61,145,.26)}55%{transform:scale(1.05)}100%{transform:scale(1);filter:none}}
 
 /* ====== BOOT / LOADING ULTRA PRO ====== */
@@ -650,6 +650,25 @@ body.search-has-text #raffles{ display:none !important; } /* << solo mostrar sel
   #raffles{gap:10px;margin-top:12px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none !important;transition:none !important}}
+
+/* =========================
+   NUMEROS HERMANOS (Principal + Hermano)
+   ========================= */
+.raffle .nums{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;line-height:1}
+.raffle .numMain{font-size:clamp(34px,7.4vw,48px);font-weight:1000;letter-spacing:.14em;text-shadow:0 2px 10px rgba(0,0,0,.45),0 0 18px rgba(245,249,255,.18)}
+.raffle .numBrother{font-size:clamp(15px,3.2vw,20px);font-weight:900;letter-spacing:.28em;opacity:.9;position:relative}
+.raffle .numBrother::before{content:"";display:block;height:1px;width:68px;margin:6px auto 8px;border-radius:999px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);opacity:.85}
+.large-raffle .numMain{font-size:clamp(54px,10vw,76px)}
+.large-raffle .numBrother{font-size:clamp(18px,3.8vw,26px)}
+.raffle .badge{position:absolute;top:10px;left:10px;z-index:3;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:900;letter-spacing:.14em;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);box-shadow:0 0 0 1px rgba(0,0,0,.25),0 8px 18px rgba(0,0,0,.35);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.raffle.occupied{cursor:not-allowed;filter:saturate(.7) contrast(.95)}
+.raffle.occupied .numMain,.raffle.occupied .numBrother{opacity:.72}
+.raffle.occupied .tick{display:none}
+
+/* Carrito: más ancho para "0000 - 9119" */
+.cart-item{min-width:128px}
+.cart-item-num{font-size:14px;white-space:nowrap}
+
 </style>
 
 
@@ -778,7 +797,7 @@ const CACHE_META = Object.freeze({
   path: location.pathname
 });
 
-const MAP_CACHE_KEY   = `${CACHE_NS}_map_v3`;
+const MAP_CACHE_KEY   = `${CACHE_NS}_map_v4`;
 const CONF_CACHE_KEY  = `${CACHE_NS}_conf_v1`;
 const LOGO_CACHE_KEY  = `${CACHE_NS}_logo_v1`;
 const BLOCK_CACHE_KEY = `${CACHE_NS}_block_v1`;
@@ -791,25 +810,26 @@ function cacheMetaOK(meta){
 }
 
 
-function saveMapCache(freeList){
+function saveMapCache(freeList, broMap){
   try{
     localStorage.setItem(
       MAP_CACHE_KEY,
-      JSON.stringify({ ts: Date.now(), meta: CACHE_META, freeList })
+      JSON.stringify({ ts: Date.now(), meta: CACHE_META, freeList, broMap: (broMap||{}) })
     );
-  }catch(_){}
+  }catch(_){ }
 }
 function loadMapCache(){
   try{
     const raw = localStorage.getItem(MAP_CACHE_KEY);
     if(!raw) return null;
 
-    const { ts, meta, freeList } = JSON.parse(raw);
+    const { ts, meta, freeList, broMap } = JSON.parse(raw);
     if(!cacheMetaOK(meta)) return null;
     if(!Array.isArray(freeList)) return null;
+    const bm = (broMap && typeof broMap==='object') ? broMap : {};
 
-    if(Date.now() - ts > CACHE_TTL_MS) return { freeList, stale: true };
-    return { freeList, stale: false };
+    if(Date.now() - ts > CACHE_TTL_MS) return { freeList, broMap: bm, stale: true };
+    return { freeList, broMap: bm, stale: false };
   }catch(_){
     return null;
   }
@@ -1011,7 +1031,10 @@ async function fetchCsvBySheetRange(sheetName, rangeA1, timeoutEach=5500){
 /* =========================
    Estado global liviano
    ========================= */
-let ALL = {};             // { "0000": "libre"/"ocupado" }
+let ALL = {};             // estado por NÚMERO PRINCIPAL (ticketKey)
+let BRO = {};             // { "0000": "9119" } (columna N)
+let REV = {};             // { "9119": "0000" } índice inverso
+let BROTHERS = new Set(); // conjunto de hermanos (para no duplicar boletas)
 let DAILY = [];           // hasta 240 render inmediato
 let SEARCH_INPUT = null;
 let GRID_TIMER = null;
@@ -1027,6 +1050,42 @@ let CART_ITEMS = [];
    Utils
    ========================= */
 const pad4 = n => String(n).replace(/\D/g,'').slice(0,4).padStart(4,'0');
+function rebuildBrotherIndex(){
+  REV = {};
+  BROTHERS = new Set();
+  for (const [m,b] of Object.entries(BRO || {})){
+    const main = pad4(m);
+    const bro  = pad4(b);
+    if(!bro || bro === main) continue;
+    if(!REV[bro]) REV[bro] = main;
+    BROTHERS.add(bro);
+  }
+}
+function applyBroMap(broMap){
+  BRO = (broMap && typeof broMap === 'object') ? broMap : {};
+  rebuildBrotherIndex();
+}
+function resolveMain(n){
+  const p = pad4(n);
+  return REV[p] || p;
+}
+function statusOf(n){
+  const main = resolveMain(n);
+  return (ALL && ALL[main]) ? ALL[main] : 'ocupado';
+}
+function pairOf(n){
+  const main = resolveMain(n);
+  const bro = (BRO && BRO[main]) ? pad4(BRO[main]) : '';
+  return { main, bro };
+}
+function formatPair(n){
+  const { main, bro } = pairOf(n);
+  return bro ? `${main} - ${bro}` : main;
+}
+function isTicketKey(n){
+  return !BROTHERS.has(pad4(n));
+}
+
 const todayKey = () => new Date().toISOString().slice(0,10);
 function randInt(maxExclusive){
   if (crypto?.getRandomValues){ const b = new Uint32Array(1); crypto.getRandomValues(b); return b[0] % maxExclusive; }
@@ -1166,7 +1225,8 @@ function openWA(payload){
   if (Array.isArray(payload)) {
     const unique = Array.from(new Set(payload.map(pad4)));
     if (!unique.length) return;
-    const listado = unique.map((n,idx)=> `${idx+1}. ${n}`).join('\n');
+    const listado = unique.map((n,idx)=> `${idx+1}. ${formatPair(n)}`).join('
+');
     message =
       `Hola, estoy interesado en separar los siguientes números:\n\n` +
       `${listado}\n\n` +
@@ -1174,7 +1234,7 @@ function openWA(payload){
       `Quedo atento(a) a la confirmación de disponibilidad.`;
   } else {
     const number = pad4(payload);
-    message = "Hola, estoy interesado en separar este número: " + number;
+    message = "Hola, estoy interesado en separar este número: " + formatPair(number);
   }
 
   const url = "https://wa.me/" + tel + "?text=" + encodeURIComponent(message);
@@ -1218,9 +1278,10 @@ function renderCart(){
   const item = document.createElement('div');
   item.className = 'cart-item';
   item.dataset.num = num;
+  const labelNum = formatPair(num);
   item.innerHTML =
-    `<span class="cart-item-num">${num}</span>`+
-    `<button type="button" class="cart-item-remove" aria-label="Quitar ${num}">&times;</button>`;
+    `<span class="cart-item-num">${labelNum}</span>`+
+    `<button type="button" class="cart-item-remove" aria-label="Quitar ${labelNum}">&times;</button>`;
   strip.appendChild(item);
    });
 
@@ -1298,15 +1359,32 @@ function finalizeCart(){
 
 function makeTile(num, large){
   const el = document.createElement('div');
-  const p = pad4(num);
+
+  // ✅ Siempre trabajamos con el número PRINCIPAL (ticketKey)
+  const main = resolveMain(num);
+  const { bro } = pairOf(main);
+  const st = statusOf(main);
+
   el.className = 'raffle' + (large ? ' large-raffle' : '');
-  el.dataset.num = p;
-  el.innerHTML = `<span class="num">${p}</span><span class="tick" aria-hidden="true">✓</span>`;
-  if (CART_ITEMS.includes(p)) el.classList.add('selected');
+  el.dataset.num = main;
+  if(bro) el.dataset.bro = bro;
+
+  if(st !== 'libre') el.classList.add('occupied');
+
+  el.innerHTML = `
+    <div class="nums">
+      <div class="numMain">${main}</div>
+      ${bro ? `<div class="numBrother">${bro}</div>` : ``}
+    </div>
+    <span class="tick" aria-hidden="true">✓</span>
+    ${st !== 'libre' ? `<span class="badge">OCUPADA</span>` : ``}
+  `;
+
+  if (CART_ITEMS.includes(main)) el.classList.add('selected');
 
   el.addEventListener('pointerdown', (ev)=>{ el._lastPt = {x:ev.clientX, y:ev.clientY}; }, {passive:true});
   el.addEventListener('touchstart', (ev)=>{ const t=ev.touches&&ev.touches[0]; if(t) el._lastPt={x:t.clientX,y:t.clientY}; }, {passive:true});
-  el.addEventListener('click', (ev)=> onTileTap(el, p, el._lastPt || {x:ev.clientX, y:ev.clientY}), {passive:true});
+  el.addEventListener('click', (ev)=> onTileTap(el, main, el._lastPt || {x:ev.clientX, y:ev.clientY}), {passive:true});
   return el;
 }
 function renderGrid(){
@@ -1420,18 +1498,53 @@ async function syncMapFast(){
     const txt = await fetchCsvAny(GID_RAFFLES, 6000);
     const rows = parseCSV(txt);
     if(rows.length < 2) return;
-    const freeList=[];
+
+    // status por fila (col A/B) y hermanos (col N)
+    const statusBy = {};       // num -> 'libre' | 'ocupado'
+    const broMap = {};         // principal -> hermano
+    const brotherSet = new Set();
+
     for(let i=1;i<rows.length;i++){
-      const r=rows[i]||[]; const a=(r[0]??'').toString().trim(); const b=(r[1]??'').toString().trim();
-      if(!a) continue; let digits=a.replace(/\D/g,''); if(!digits) continue;
-      if(digits.length>4) digits=digits.slice(0,4);
-      const num=digits.padStart(4,'0');
-      if (normStatusAB(b)==='libre') freeList.push(num);
+      const r = rows[i] || [];
+      const a = (r[0] ?? '').toString().trim();   // A = principal (o número de la fila)
+      const b = (r[1] ?? '').toString().trim();   // B = estado
+      const n = (r[13] ?? '').toString().trim();  // N = número hermano
+
+      if(!a) continue;
+      let digits = a.replace(/\D/g,'');
+      if(!digits) continue;
+      if(digits.length>4) digits = digits.slice(0,4);
+      const num = digits.padStart(4,'0');
+
+      statusBy[num] = normStatusAB(b);
+
+      if(n){
+        let bd = n.replace(/\D/g,'');
+        if(bd){
+          if(bd.length>4) bd = bd.slice(0,4);
+          const bro = bd.padStart(4,'0');
+          if(bro && bro !== num){
+            broMap[num] = bro;
+            brotherSet.add(bro);
+          }
+        }
+      }
     }
-    saveMapCache(freeList);
-    setAllFromFreeList(freeList);
-    const before=DAILY.length;
-    DAILY = DAILY.filter(n=>ALL[n]==='libre');
+
+    // aplicar hermanos
+    applyBroMap(broMap);
+
+    // ✅ Lista de boletas libres (solo principales — excluye hermanos)
+    const freeTickets = [];
+    for(const [num, st] of Object.entries(statusBy)){
+      if(st === 'libre' && !brotherSet.has(num)) freeTickets.push(num);
+    }
+
+    saveMapCache(freeTickets, broMap);
+    setAllFromFreeList(freeTickets);
+
+    const before = DAILY.length;
+    DAILY = DAILY.filter(n => ALL[n] === 'libre');
     if(DAILY.length===0){ pickDaily(true); }
     if(DAILY.length!==before){ renderGrid(); }
   }catch(_){ }
@@ -1447,8 +1560,13 @@ async function rerenderSearch(){
   layer.style.display='none'; layer.innerHTML='';
   if(raw.length===0){ document.body.classList.remove('search-has-text'); return; }
   document.body.classList.add('search-has-text');
-  const padded=pad4(raw); const st=ALL[padded]||'ocupado';
-  if(st==='libre'){ hideMsg(); renderSearchOne(padded); } else { clearSearchLayer(); msg('Boleta ocupada', true); }
+  const padded=pad4(raw);
+  const main = resolveMain(padded);
+  const st = statusOf(main);
+
+  renderSearchOne(main);
+  if(st==='libre'){ hideMsg(); }
+  else { msg('Boleta ocupada', true); }
 }
 
 /* =========================
@@ -1629,9 +1747,9 @@ function onTileTap(el, num, pt){
 
   const n = pad4(num);
 
-  // Si el mapa dice que está ocupada, no permitimos agregar
-  const st = ALL?.[n];
-  if(st && st !== 'libre'){
+  // Si el ticket (principal) está ocupado, no permitimos agregar
+  const st = statusOf(n);
+  if(st !== 'libre'){
     msg('Boleta ocupada', true);
     return;
   }
@@ -1639,7 +1757,7 @@ function onTileTap(el, num, pt){
   // Ya estaba seleccionada
   if(CART_ITEMS.includes(n)){
     setTileSelected(n, true);
-    msg('Ya está en el carrito: ' + n, false);
+    msg('Ya está en el carrito: ' + formatPair(n), false);
     return;
   }
 
@@ -1657,7 +1775,7 @@ function onTileTap(el, num, pt){
 
   // ✅ Directo al carrito (sin ventana)
   addToCart(n);
-  msg('Agregado al carrito: ' + n, false);
+  msg('Agregado al carrito: ' + formatPair(n), false);
 }
 
 /* =========================
@@ -1744,7 +1862,11 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     document.body.classList.add('search-has-text');
 
     if(!ALL || !Object.keys(ALL).length){
-      const c=loadMapCache(); if(c?.freeList){ setAllFromFreeList(c.freeList); }
+      const c=loadMapCache();
+      if(c?.freeList){
+        applyBroMap(c.broMap);
+        setAllFromFreeList(c.freeList);
+      }
       else { await syncMapFast(); }
     }
     const libres=Object.keys(ALL||{}).filter(k=>ALL[k]==='libre');
@@ -1798,6 +1920,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 
   const mcache=loadMapCache();
   if(mcache?.freeList){
+    applyBroMap(mcache.broMap);
     setAllFromFreeList(mcache.freeList);
     pickDaily(true);
     renderGrid();
