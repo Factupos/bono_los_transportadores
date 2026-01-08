@@ -1225,8 +1225,7 @@ function openWA(payload){
   if (Array.isArray(payload)) {
     const unique = Array.from(new Set(payload.map(pad4)));
     if (!unique.length) return;
-    const listado = unique.map((n,idx)=> `${idx+1}. ${formatPair(n)}`).join('
-');
+    const listado = unique.map((n,idx)=> `${idx+1}. ${formatPair(n)}`).join('\n');
     message =
       `Hola, estoy interesado en separar los siguientes números:\n\n` +
       `${listado}\n\n` +
