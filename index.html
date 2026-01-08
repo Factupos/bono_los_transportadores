@@ -652,20 +652,120 @@ body.search-has-text #raffles{ display:none !important; } /* << solo mostrar sel
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none !important;transition:none !important}}
 
 /* =========================
-   NUMEROS HERMANOS (Principal + Hermano)
+   NUMEROS HERMANOS (Principal + Hermano) — AJUSTE PRO
    ========================= */
-.raffle .nums{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;line-height:1}
-.raffle .numMain{font-size:clamp(34px,7.4vw,48px);font-weight:1000;letter-spacing:.14em;text-shadow:0 2px 10px rgba(0,0,0,.45),0 0 18px rgba(245,249,255,.18)}
-.raffle .numBrother{font-size:clamp(15px,3.2vw,20px);font-weight:900;letter-spacing:.28em;opacity:.9;position:relative}
-.raffle .numBrother::before{content:"";display:block;height:1px;width:68px;margin:6px auto 8px;border-radius:999px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);opacity:.85}
-.large-raffle .numMain{font-size:clamp(54px,10vw,76px)}
-.large-raffle .numBrother{font-size:clamp(18px,3.8vw,26px)}
-.raffle .badge{position:absolute;top:10px;left:10px;z-index:3;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:900;letter-spacing:.14em;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);box-shadow:0 0 0 1px rgba(0,0,0,.25),0 8px 18px rgba(0,0,0,.35);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
-.raffle.occupied{cursor:not-allowed;filter:saturate(.7) contrast(.95)}
-.raffle.occupied .numMain,.raffle.occupied .numBrother{opacity:.72}
+
+/* tamaño unificado (misma escala para ambos) */
+.raffle{
+  --pair-fs: clamp(26px, 6.4vw, 40px);
+  --pair-ls: clamp(.06em, .55vw, .12em);
+}
+
+.raffle .nums{
+  position:relative;
+  z-index:2;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  line-height:1;
+  width:100%;
+  min-width:0;
+  padding:0 10px; /* margen interno para que nunca se salga */
+}
+
+.raffle .numMain,
+.raffle .numBrother{
+  font-size:var(--pair-fs);
+  font-weight:1000;
+  letter-spacing:var(--pair-ls);
+  width:100%;
+  text-align:center;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:clip;
+  font-variant-numeric: tabular-nums;
+  text-shadow:0 2px 10px rgba(0,0,0,.45),0 0 18px rgba(245,249,255,.18);
+}
+
+/* “hermano” con un toque distinto sin cambiar el tamaño */
+.raffle .numBrother{
+  opacity:.92;
+  filter:saturate(1.05);
+  position:relative;
+}
+
+.raffle .numBrother::before{
+  content:"";
+  display:block;
+  height:1px;
+  width:min(72px, 70%);
+  margin:6px auto 8px;
+  border-radius:999px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);
+  opacity:.85;
+}
+
+/* Boleta grande (buscador): ambos crecen igual */
+.large-raffle{
+  --pair-fs: clamp(40px, 9.2vw, 62px);
+  --pair-ls: clamp(.06em, .55vw, .12em);
+}
+
+.raffle .badge{
+  position:absolute;
+  top:10px;
+  left:10px;
+  z-index:3;
+  padding:6px 10px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:900;
+  letter-spacing:.14em;
+  background:rgba(0,0,0,.55);
+  border:1px solid rgba(255,255,255,.18);
+  box-shadow:0 0 0 1px rgba(0,0,0,.25),0 8px 18px rgba(0,0,0,.35);
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+}
+
+/* =========================
+   ESTADO OCUPADA — MÁS INDICADOR
+   ========================= */
+.raffle.occupied{
+  cursor:not-allowed;
+  filter:saturate(.55) contrast(.92) brightness(.92);
+}
+
+/* aro exterior en rojo */
+.raffle.occupied::before{
+  background:conic-gradient(from 180deg at 50% 50%, #ff3b30, #ff9f0a, #ff3b30);
+  opacity:.98;
+}
+
+/* brillo interno con tinte rojo */
+.raffle.occupied::after{
+  background:radial-gradient(60% 60% at 50% 45%, rgba(255,59,48,.18), transparent 70%);
+}
+
+/* números más “apagados” */
+.raffle.occupied .numMain,
+.raffle.occupied .numBrother{
+  opacity:.62;
+}
+
+/* badge más rojo (si se usa) */
+.raffle.occupied .badge{
+  background:rgba(255,59,48,.18);
+  border-color:rgba(255,59,48,.45);
+  box-shadow:0 0 0 1px rgba(0,0,0,.25),0 10px 22px rgba(255,59,48,.12);
+}
+
 .raffle.occupied .tick{display:none}
 
-/* Carrito: más ancho para "0000 - 9119" */
+
+Carrito: más ancho para "0000 - 9119" */
 .cart-item{min-width:128px}
 .cart-item-num{font-size:14px;white-space:nowrap}
 
