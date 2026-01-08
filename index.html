@@ -672,7 +672,8 @@ body.search-has-text #raffles{ display:none !important; } /* << solo mostrar sel
   line-height:1;
   width:100%;
   min-width:0;
-  padding:0 10px; /* margen interno para que nunca se salga */
+  box-sizing:border-box;   /* ✅ CLAVE: evita el recorte */
+  padding:0 14px;          /* ✅ un poquito más de margen */
 }
 
 .raffle .numMain,
